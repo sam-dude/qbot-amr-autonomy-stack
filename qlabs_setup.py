@@ -30,6 +30,18 @@ from qvl.real_time import QLabsRealTime
 import pal.resources.rtmodels as rtmodels
 
 
+def build_arena_layout():
+    """Return a consistent arena grid with no tile or barrier overlap."""
+    cell_size = 1.2
+    wall_positions = np.linspace(-2.4, 2.4, 5)
+    tile_positions = np.linspace(-1.8, 1.8, 4)
+
+    # The arena is kept intentionally open and clean. The extra interior barriers
+    # cause false contact events and clutter the simulated workspace.
+    obstacles = []
+    return wall_positions, tile_positions, obstacles
+
+
 def setup(
     locationQBotP=[0, 0, 0.05],
     rotationQBotP=[0, 0, 0],
@@ -104,10 +116,10 @@ def setup(
         print("Spawning arena walls...")
 
     hWall = QLabsWalls(qlabs)
-    enDynamics = True  # Keep walls static and perfectly vertical (prevents tipping/buckling)
+    enDynamics = False  # Keep walls fixed and aligned; dynamic bodies make the arena drift and look messy.
 
     # --- Outer boundary walls (4.8m x 4.8m perimeter, walls flush at z=0.0) ---
-    wall_positions = [-2.0, -1.0, 0.0, 1.0, 2.0]
+    wall_positions, _, _ = build_arena_layout()
 
     # North wall (y = +2.4)
     for x in wall_positions:
@@ -129,40 +141,37 @@ def setup(
         hWall.spawn_degrees(location=[-2.4, y, 0.0], rotation=[0, 0, 0])
         hWall.set_enable_dynamics(enDynamics)
 
-    # --- Interior obstacle walls (clean upright obstacles outside the test quadrant) ---
-    # NW obstacle (angled barrier)
-    hWall.spawn_degrees(location=[-1.2, 1.0, 0.0], rotation=[0, 0, 45])
-    hWall.set_enable_dynamics(enDynamics)
-
-    # SW obstacle
-    hWall.spawn_degrees(location=[-1.0, -1.2, 0.0], rotation=[0, 0, -45])
-    hWall.set_enable_dynamics(enDynamics)
+    # --- Interior obstacle walls (aligned to the same 1.2m arena grid) ---
+    _, _, obstacle_layout = build_arena_layout()
+    for x, y, angle in obstacle_layout:
+        hWall.spawn_degrees(location=[x, y, 0.0], rotation=[0, 0, angle])
+        hWall.set_enable_dynamics(enDynamics)
 
     # ======================== Spawn Floor Tiles ========================
     if verbose:
         print("Spawning flooring...")
 
     hFloor = QLabsQBotPlatformFlooring(qlabs)
-    # Seamless 4x4 grid of 1.2m x 1.2m tiles covering 4.8m x 4.8m
-    # Configured with a cohesive outer track loop and clean interior
+    # Use a single 4x4 tile grid with exact 1.2m spacing and no overlap.
     actor_id = 0
-    tile_coords = [-1.8, -0.6, 0.6, 1.8]
-    for x in tile_coords:
-        for y in tile_coords:
-            # Determine tile orientation & config for a neat track layout
-            if x == -1.8 and y == 1.8:      # NW Corner
+    _, tile_positions, _ = build_arena_layout()
+    for x in tile_positions:
+        for y in tile_positions:
+            # Explicitly map each tile to a clean orientation without reusing
+            # ambiguous center/edge positions.
+            if np.isclose(x, -1.8) and np.isclose(y, 1.8):
                 rot, cfg = [0, 0, 0], 0
-            elif x == 1.8 and y == 1.8:     # NE Corner
-                rot, cfg = [0, 0, -np.pi/2], 0
-            elif x == 1.8 and y == -1.8:    # SE Corner
+            elif np.isclose(x, 1.8) and np.isclose(y, 1.8):
+                rot, cfg = [0, 0, -np.pi / 2], 0
+            elif np.isclose(x, 1.8) and np.isclose(y, -1.8):
                 rot, cfg = [0, 0, np.pi], 0
-            elif x == -1.8 and y == -1.8:   # SW Corner
-                rot, cfg = [0, 0, np.pi/2], 0
-            elif y in [1.8, -1.8]:          # North / South Straights
+            elif np.isclose(x, -1.8) and np.isclose(y, -1.8):
+                rot, cfg = [0, 0, np.pi / 2], 0
+            elif np.isclose(y, 1.8) or np.isclose(y, -1.8):
                 rot, cfg = [0, 0, 0], 1
-            elif x in [1.8, -1.8]:          # East / West Straights
-                rot, cfg = [0, 0, np.pi/2], 1
-            else:                           # Center 2x2 Arena
+            elif np.isclose(x, 1.8) or np.isclose(x, -1.8):
+                rot, cfg = [0, 0, np.pi / 2], 1
+            else:
                 rot, cfg = [0, 0, 0], 1
 
             hFloor.spawn_id(

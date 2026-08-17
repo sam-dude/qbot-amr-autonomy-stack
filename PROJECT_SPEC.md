@@ -26,40 +26,51 @@ Use this checklist to track your progress as you build and test each module.
 - [x] **Task 1.3**: Implement `update_pose_rk2(delta_sL, delta_sR)` (2nd-order midpoint integration).
 - [x] **Task 1.4**: Implement `fuse_heading_complementary(...)` (IMU Gyro $\omega_z$ + Encoder blending).
 - [x] **Task 1.5**: Run `python test_odometry.py` in simulation to verify the $1.0\text{m} \times 1.0\text{m}$ square maneuver.
-- [ ] **Task 1.6**: Inspect loop closure errors and verify generated plot `docs/figures/odometry_benchmark.png`.
+- [x] **Task 1.6**: Inspect loop closure errors and verify generated plot `docs/figures/odometry_benchmark.png`.
 - [ ] **Task 1.7 (Lab)**: Deploy and run `test_odometry.py` on the physical QBot.
 
 ---
 
-### 📍 Phase 2: 2D Occupancy Grid Mapping (Lidar SLAM)
-- [ ] **Task 2.1**: Implement `bresenham_line(x0, y0, x1, y1)` for fast grid raycasting.
-- [ ] **Task 2.2**: Implement `inverse_sensor_model(...)` (log-odds update for free and occupied cells).
-- [ ] **Task 2.3**: Implement `lidar_to_world_frame(ranges, angles, robot_pose)` coordinate transformations.
-- [ ] **Task 2.4**: Assemble `update_occupancy_grid(...)` to paint the map from 1680-point Lidar scans.
-- [ ] **Task 2.5**: Run `python test_mapping.py` with keyboard teleoperation and watch the arena map generate live.
+### 📍 Phase 2: Line-Following Driver (Quanser Hardware Pattern)
+This new phase sits before the LiDAR SLAM stack and acts as the real-time motion layer for the robot. Following the Quanser lab pattern, the robot will be armed/disarmed with the joystick, use the downward-facing camera as its primary sense, and run a proportional steering controller to keep the robot centered on a line while the LiDAR pipeline operates in the background as a mapping and safety layer.
+
+- [ ] **Task 2.1**: Model the Quanser hardware workflow: `observer.py` on the local PC, robot script on the QBot, joystick arm/disarm, and downward camera as the primary feedback signal.
+- [ ] **Task 2.2**: Implement `line_following.py` as a Quanser-style robot driver using a proportional lateral-error controller for a differential-drive QBot.
+- [ ] **Task 2.3**: Capture the line centroid from the downward camera, compute normalized lateral error, and convert it into body velocity commands $(v, \omega)$.
+- [ ] **Task 2.4**: Add recovery behavior when the line is lost: slow forward speed and a turn-in-place search pattern.
+- [ ] **Task 2.5**: Verify the line-following controller in simulation and then on hardware while keeping the LiDAR SLAM stack as a slower supervisory and mapping layer.
 
 ---
 
-### 📍 Phase 3: RGB-D 3D Semantic Perception
-- [ ] **Task 3.1**: Integrate pre-trained lightweight YOLOv8-nano on the RealSense RGB stream.
-- [ ] **Task 3.2**: Implement `back_project_to_3d(u, v, depth, K)` using camera pinhole intrinsics.
-- [ ] **Task 3.3**: Transform 3D bounding boxes from Camera Frame $\rightarrow$ Robot Frame $\rightarrow$ World Map Frame.
-- [ ] **Task 3.4**: Display 3D wireframe bounding boxes and metric distances $(X, Y, Z)$ on the HUD.
+### 📍 Phase 3: 2D Occupancy Grid Mapping (Lidar SLAM)
+- [ ] **Task 3.1**: Implement `bresenham_line(x0, y0, x1, y1)` for fast grid raycasting.
+- [ ] **Task 3.2**: Implement `inverse_sensor_model(...)` (log-odds update for free and occupied cells).
+- [ ] **Task 3.3**: Implement `lidar_to_world_frame(ranges, angles, robot_pose)` coordinate transformations.
+- [ ] **Task 3.4**: Assemble `update_occupancy_grid(...)` to paint the map from 1680-point Lidar scans.
+- [ ] **Task 3.5**: Run `python test_mapping.py` with keyboard teleoperation and watch the arena map generate live.
 
 ---
 
-### 📍 Phase 4: Dynamic Obstacle Avoidance & Reactive Navigation
-- [ ] **Task 4.1**: Implement Lidar dynamic safety cone (`detect_frontal_obstacle`) with speed-dependent stopping distance.
-- [ ] **Task 4.2**: Implement reactive avoidance logic (slow down / rotate around sudden obstacles or people in front of the robot).
-- [ ] **Task 4.3**: Integrate LED indicator states (Green: Clear path, Yellow: Slowing/Turning, Red: Stopped).
+### 📍 Phase 4: RGB-D 3D Semantic Perception
+- [ ] **Task 4.1**: Integrate pre-trained lightweight YOLOv8-nano on the RealSense RGB stream.
+- [ ] **Task 4.2**: Implement `back_project_to_3d(u, v, depth, K)` using camera pinhole intrinsics.
+- [ ] **Task 4.3**: Transform 3D bounding boxes from Camera Frame $\rightarrow$ Robot Frame $\rightarrow$ World Map Frame.
+- [ ] **Task 4.4**: Display 3D wireframe bounding boxes and metric distances $(X, Y, Z)$ on the HUD.
 
 ---
 
-### 📍 Phase 5: Full-Stack Integration & LinkedIn Demo
-- [ ] **Task 5.1**: Combine all modules into `main_semantic_amr.py`.
-- [ ] **Task 5.2**: Test full autonomous loop in QLabs simulation (mapping + 3D object detection + obstacle avoidance).
-- [ ] **Task 5.3**: Deploy to physical QBot in the lab and capture video recording of the robot navigating around people/obstacles.
-- [ ] **Task 5.4**: Export final telemetry figures and publish the project demo.
+### 📍 Phase 5: Dynamic Obstacle Avoidance & Reactive Navigation
+- [ ] **Task 5.1**: Implement Lidar dynamic safety cone (`detect_frontal_obstacle`) with speed-dependent stopping distance.
+- [ ] **Task 5.2**: Implement reactive avoidance logic (slow down / rotate around sudden obstacles or people in front of the robot).
+- [ ] **Task 5.3**: Integrate LED indicator states (Green: Clear path, Yellow: Slowing/Turning, Red: Stopped).
+
+---
+
+### 📍 Phase 6: Full-Stack Integration & LinkedIn Demo
+- [ ] **Task 6.1**: Combine all modules into `main_semantic_amr.py`.
+- [ ] **Task 6.2**: Test full autonomous loop in QLabs simulation (line-following + mapping + 3D object detection + obstacle avoidance).
+- [ ] **Task 6.3**: Deploy to physical QBot in the lab and capture video recording of the robot navigating around people/obstacles.
+- [ ] **Task 6.4**: Export final telemetry figures and publish the project demo.
 
 ---
 
