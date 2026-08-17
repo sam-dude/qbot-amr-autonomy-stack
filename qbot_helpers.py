@@ -19,9 +19,9 @@ from pal.products.qbot_platform import (
     QBotPlatformLidar,
     QBotPlatformRealSense,
     QBotPlatformCSICamera,
-    Keyboard,
     IS_PHYSICAL_QBOTPLATFORM
 )
+from pal.utilities.gamepad import LogitechF710
 from quanser.hardware import HILError
 
 @dataclass
@@ -97,24 +97,40 @@ class QBotHardwareInterface:
         self.enable_downward_cam = enable_downward_cam
 
         print(f"[QBotInterface] Running on {'Physical Hardware' if IS_PHYSICAL_QBOTPLATFORM else 'Digital Twin / Simulation'}")
-        
+
+        if IS_PHYSICAL_QBOTPLATFORM:
+            self._load_platform_driver()
+
         # 1. Base platform driver (Motors, Encoders, IMU, Battery)
         self.driver = QBotPlatformDriver(mode=self.mode, ip=self.ip_driver)
-        
+
         # 2. Sensors
         self.lidar = QBotPlatformLidar(numMeasurements=1680) if enable_lidar else None
         self.realsense = QBotPlatformRealSense(mode='RGB&DEPTH') if enable_realsense else None
         self.down_cam = QBotPlatformCSICamera(exposure=10) if enable_downward_cam else None
-        self.keyboard = Keyboard(ip=self.ip_driver)
+        self.gamepad = LogitechF710(1)
 
         self.start_time = time.time()
         self.prev_time = self.start_time
         self.sensor_data = QBotSensors()
         
         # Arming & Control state
-        self.armed = True
+        # Match the Quanser hardware flow: the robot starts disarmed until the
+        # user presses and holds the left trigger/button to arm it.
+        self.armed = False
+        self._left_press_seen = False
+        self._right_press_seen = False
         self.command = np.zeros(2, dtype=np.float64)
         self.led_color = [0.0, 1.0, 0.0]  # Green by default
+
+    def _load_platform_driver(self):
+        """Load the physical QBot platform driver before other hardware objects are created."""
+        print("[QBotInterface] Loading physical QBot driver...")
+        os.system('quarc_run -q -Q -t tcpip://localhost:17000 *.rt-linux_qbot_platform -d /tmp')
+        time.sleep(5)
+        os.system('quarc_run -r -t tcpip://localhost:17000 qbot_platform_driver_physical.rt-linux_qbot_platform -d /tmp -uri tcpip://localhost:17099')
+        time.sleep(3)
+        print("[QBotInterface] Driver loaded")
 
         # Auto-shutdown on process exit
         atexit.register(self.close)
@@ -147,6 +163,8 @@ class QBotHardwareInterface:
         dt = curr_time - self.prev_time
         self.prev_time = curr_time
         timestamp = curr_time - self.start_time
+
+        self._update_gamepad_state()
 
         # Send command to hardware / simulation
         new_data = self.driver.read_write_std(
@@ -185,20 +203,46 @@ class QBotHardwareInterface:
 
         return self.sensor_data
 
-    def check_emergency_stop(self) -> bool:
-        """Reads keyboard inputs. Returns True if emergency stop requested (key 'u')."""
-        if not self.armed:
-            return True
+    def _update_gamepad_state(self):
+        """Read the LogitechF710 controller state and update arming / emergency-stop state."""
+        if not hasattr(self, 'gamepad') or self.gamepad is None:
+            return
         try:
-            if self.keyboard and self.keyboard.read():
-                if getattr(self.keyboard, 'k_u', False):
-                    print("\n[EMERGENCY STOP TRIGGERED] Operator halted motors with 'u' key!")
-                    self.armed = False
-                    self.set_body_velocity(0.0, 0.0)
-                    self.set_led(1.0, 0.0, 0.0)  # Red
-                    return True
+            new_data = self.gamepad.read()
+            if not new_data:
+                return
+
+            left_pressed = bool(getattr(self.gamepad, 'buttonLeft', False))
+            right_pressed = bool(getattr(self.gamepad, 'buttonRight', False))
+
+            if right_pressed:
+                self.armed = False
+                self._left_press_seen = False
+                self._right_press_seen = True
+                self.set_body_velocity(0.0, 0.0)
+                self.set_led(1.0, 0.0, 0.0)
+                print("\n[EMERGENCY STOP TRIGGERED] Operator halted motors with RB!")
+                return
+
+            # One-click arm latch: the robot becomes armed on the first LB press,
+            # and stays armed until RB emergency stop is pressed. We do not disarm on release.
+            if left_pressed and not self._left_press_seen:
+                self.armed = True
+                self._left_press_seen = True
+                self.set_led(0.0, 1.0, 0.0)
+                print("[QBotInterface] Armed by left trigger/button press.")
+            elif not left_pressed:
+                self._left_press_seen = False
+
         except Exception:
             pass
+
+    def check_emergency_stop(self) -> bool:
+        """Check the gamepad arm/emergency-stop state using the Quanser lab controller pattern."""
+        self._update_gamepad_state()
+        if not self.armed:
+            self.set_body_velocity(0.0, 0.0)
+            return True
         return False
 
     def close(self):
@@ -227,8 +271,8 @@ class QBotHardwareInterface:
         if self.down_cam:
             try: self.down_cam.terminate()
             except Exception: pass
-        if self.keyboard:
-            try: self.keyboard.terminate()
+        if hasattr(self, 'gamepad') and self.gamepad is not None:
+            try: self.gamepad.terminate()
             except Exception: pass
         try:
             cv2.destroyAllWindows()
