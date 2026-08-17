@@ -142,7 +142,17 @@ python test_odometry.py
 
 ## 📌 Project Roadmap
 - [x] **Phase 1**: Odometry Engine (Euler, RK2 & Complementary IMU fusion)
-- [ ] **Phase 2**: 2D Occupancy Grid SLAM (Log-odds raycasting)
-- [ ] **Phase 3**: RGB-D 3D Semantic Perception (YOLOv8 + metric back-projection)
-- [ ] **Phase 4**: Reactive Obstacle Avoidance & Safety Dynamic Cone
-- [ ] **Phase 5**: Full Integration & Physical Lab Deployment
+- [ ] **Phase 2**: Quanser-style Line-Following Driver (camera-based motion layer before SLAM)
+- [ ] **Phase 3**: 2D Occupancy Grid SLAM (Log-odds raycasting)
+- [ ] **Phase 4**: RGB-D 3D Semantic Perception (YOLOv8 + metric back-projection)
+- [ ] **Phase 5**: Reactive Obstacle Avoidance & Safety Dynamic Cone
+- [ ] **Phase 6**: Full Integration & Physical Lab Deployment
+
+### Quanser Hardware Pattern We Are Modeling
+The Quanser robotics labs use a clear sequence:
+1. Run `observer.py` on the local Windows machine to receive telemetry.
+2. Run the robot-side Python script on the QBot Platform.
+3. Arm/disarm through the joystick and use the downward camera as the line-following sensor.
+4. Use forward kinematics and wheel-speed commands to drive the robot while the system logs vehicle states.
+
+This project follows the same pattern, with the line-following driver acting as the real-time navigation layer, while the LiDAR SLAM module remains a higher-level mapping and awareness layer behind it.

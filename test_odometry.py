@@ -42,7 +42,8 @@ if not IS_PHYSICAL_QBOTPLATFORM:
 
 
 def drive_timed(robot: QBotHardwareInterface, odom: OdometryEngine, dashboard: QBotDashboard,
-                v: float, omega: float, duration: float, dt_target: float = 0.016) -> bool:
+                v: float, omega: float, duration: float, dt_target: float = 0.016,
+                compass_heading=None) -> bool:
     """
     Drives the robot at [v, omega] for a specified duration while updating odometry.
     Returns False if stopped early, True if completed normally.
@@ -66,6 +67,12 @@ def drive_timed(robot: QBotHardwareInterface, odom: OdometryEngine, dashboard: Q
             gyro_yaw_rate=sensors.gyroscope[2],
             dt=sensors.dt if sensors.dt > 0 else dt_target
         )
+
+        # Optional absolute-heading correction hook. If a compass is connected in the
+        # future, it should be passed here as radians and used to keep heading drift
+        # in check without overriding the wheel-based motion estimate.
+        if compass_heading is not None:
+            odom.fuse_compass_heading(compass_heading)
 
         # Step 4: Render HUD with RK2 pose
         key = dashboard.render(sensors=sensors, pose=poses['rk2'])
@@ -97,6 +104,24 @@ def run_square_benchmark(side_length: float = 1.0, speed_linear: float = 0.2, sp
     odom = OdometryEngine(init_pose=(0.0, 0.0, 0.0))
     dashboard = QBotDashboard(window_name="QBot Odometry Benchmark HUD")
 
+    # Startup IMU calibration: wait until the robot is truly still and then estimate
+    # the gyro bias. This reduces long-term heading drift before motion begins.
+    def read_stationary_sample():
+        return robot.step(read_cameras=False, read_lidar=False)
+
+    odom.calibrate_stationary_gyro_bias(
+        sensor_reader=read_stationary_sample,
+        max_wait_s=3.0,
+        wheel_threshold=1e-5,
+        gyro_threshold=0.01,
+        min_samples=25
+    )
+    print(f"[test_odometry] Calibrated gyro bias: {odom.gyro_bias:.6f} rad/s")
+
+    # Optional compass sanity check hook. The code remains compatible if no compass
+    # is available; this is simply a place to inject a heading correction later.
+    compass_heading = None
+
     # Time calculations for forward driving and 90-degree turning
     drive_duration = side_length / speed_linear
     turn_duration = (np.pi / 2.0) / speed_turn
@@ -113,23 +138,28 @@ def run_square_benchmark(side_length: float = 1.0, speed_linear: float = 0.2, sp
     try:
         for side in range(4):
             print(f"[Side {side + 1}/4] Driving forward {side_length:.1f} m...")
-            if not drive_timed(robot, odom, dashboard, v=speed_linear, omega=0.0, duration=drive_duration):
+            if not drive_timed(robot, odom, dashboard, v=speed_linear, omega=0.0,
+                              duration=drive_duration, compass_heading=compass_heading):
                 print("[test_odometry] Benchmark stopped early.")
                 break
 
             # Settle briefly before turning
-            drive_timed(robot, odom, dashboard, v=0.0, omega=0.0, duration=0.5)
+            drive_timed(robot, odom, dashboard, v=0.0, omega=0.0, duration=0.5,
+                        compass_heading=compass_heading)
 
             if side < 3:  # Don't need to turn after the 4th side completes the loop
                 print(f"[Corner {side + 1}/3] Turning 90 degrees CCW...")
-                if not drive_timed(robot, odom, dashboard, v=0.0, omega=speed_turn, duration=turn_duration):
+                if not drive_timed(robot, odom, dashboard, v=0.0, omega=speed_turn,
+                                  duration=turn_duration, compass_heading=compass_heading):
                     print("[test_odometry] Benchmark stopped early.")
                     break
-                drive_timed(robot, odom, dashboard, v=0.0, omega=0.0, duration=0.5)
+                drive_timed(robot, odom, dashboard, v=0.0, omega=0.0, duration=0.5,
+                            compass_heading=compass_heading)
 
         # Stop robot completely
         robot.set_body_velocity(0.0, 0.0)
-        drive_timed(robot, odom, dashboard, v=0.0, omega=0.0, duration=0.5)
+        drive_timed(robot, odom, dashboard, v=0.0, omega=0.0, duration=0.5,
+                    compass_heading=compass_heading)
 
     except KeyboardInterrupt:
         print("\n[test_odometry] User interrupted test.")
